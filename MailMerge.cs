@@ -21,7 +21,7 @@ namespace TetherApp
 
             try
             {
-                wordDoc = wordApp.Documents.Add(ref missing, ref missing, ref missing, ref missing);
+                wordDoc = wordApp.Documents.Add(template, ref missing, ref missing, ref missing);
 
                 selection = wordApp.Selection;
 
@@ -33,8 +33,8 @@ namespace TetherApp
                     {
                         selection.GoTo(Word.WdGoToItem.wdGoToLine, Word.WdGoToDirection.wdGoToLast);
                         selection.InsertBreak(ref sectionBreak);
+                        selection.InsertFile(template, ref missing, ref missing, ref missing, ref missing);
                     }
-                    selection.InsertFile(template, ref missing, ref missing, ref missing, ref missing);
                     selection.Document.Select();
                     MergeIt(selection, row, wordApp);
                     ndx++;
@@ -42,7 +42,9 @@ namespace TetherApp
             }
             catch(Exception ex)
             {
-                wordApp.Application.Quit();
+                // Application
+                object saveOptionsObject = Word.WdSaveOptions.wdDoNotSaveChanges;
+                wordApp.Application.Quit(ref saveOptionsObject, ref missing, ref missing); 
                 throw ex;
             }
 
@@ -73,39 +75,47 @@ namespace TetherApp
                     {
                         if (fieldName.ToLower() == col.Name.ToLower())
                         {
-                            //Check for child records
-                            XmlNodeList children = row.SelectNodes("./" + col.Name);
-                            if (children.Count > 1)
+                            //Check for secondary records
+                            if (col.FirstChild.HasChildNodes)
                             {
-                                //Merge child records.
+                                XmlNodeList secondaryRows = row.SelectNodes("./" + col.Name);
                                 //Select and delete the child container merge field.
                                 myMergeField.Select();
                                 myMergeField.Delete();
                                 //Select and copy the table row.
                                 selection.SelectRow();
                                 selection.Copy();
-
-                                //Select the table.
-                                Word.Table table = selection.Tables[1];
-
-                                //Append rows to the table.
-                                int max = children.Count - 1;
-                                for (int cnt = 0; cnt < max; cnt++)
+                                try
                                 {
-                                    selection.Paste();
-                                }
-                                //Select each row in the table and perform a merge.
-                                int ndx = 0;
-                                foreach (Word.Row tr in table.Rows)
-                                {
-                                    if (tr.Range.Fields.Count > 0)
+                                    //Select the table.
+                                    Word.Table table = selection.Tables[1];
+                                    //Paste a row for each record in the secondary source.
+                                    int ndx = 0;
+                                    foreach (XmlNode secRow in secondaryRows)
                                     {
-                                        XmlNode child = children[ndx];
-                                        tr.Select();
-                                        MergeIt(selection, child, wordApp);
+                                        if (ndx > 0)
+                                        {
+                                            selection.Paste();
+                                        }
                                         ndx++;
                                     }
+                                    //Select each row in the table and perform a merge.
+                                    ndx = 0;
+                                    foreach (Word.Row tr in table.Rows)
+                                    {
+                                        if (tr.Range.Fields.Count > 0)
+                                        {
+                                            if (ndx < secondaryRows.Count)
+                                            {
+                                                XmlNode child = secondaryRows[ndx];
+                                                tr.Select();
+                                                MergeIt(selection, child, wordApp);
+                                            }
+                                            ndx++;
+                                        }
+                                    }
                                 }
+                                catch{ }
                             }
                             else
                             {
